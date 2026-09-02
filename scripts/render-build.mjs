@@ -1,11 +1,21 @@
 import { cp, mkdir, stat } from 'node:fs/promises';
-import { spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 
-const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const build = spawnSync(npm, ['run', 'build', '--', '--prerender-all'], {
-  stdio: 'inherit',
-  shell: process.platform === 'win32',
-});
+const npm = process.env.npm_execpath
+  ? { command: process.execPath, args: [process.env.npm_execpath] }
+  : {
+      command: process.platform === 'win32' ? 'npm.cmd' : 'npm',
+      args: [],
+    };
+
+let buildError;
+try {
+  execFileSync(npm.command, [...npm.args, 'run', 'build', '--', '--prerender-all'], {
+    stdio: 'inherit',
+  });
+} catch (error) {
+  buildError = error;
+}
 
 const prerenderedIndex = 'dist/server/prerendered-routes/index.html';
 let hasPrerenderedIndex = false;
@@ -16,10 +26,7 @@ try {
   // Preserve the build failure below when no usable static output exists.
 }
 
-if (build.error) throw build.error;
-if (build.status !== 0 && !hasPrerenderedIndex) {
-  process.exit(build.status ?? 1);
-}
+if (buildError && !hasPrerenderedIndex) throw buildError;
 
 await mkdir('dist/client', { recursive: true });
 await cp(prerenderedIndex, 'dist/client/index.html');
